@@ -1,0 +1,704 @@
+import React, { useState, useCallback } from 'react';
+
+// Main App Component
+const App = () => {
+  // Global settings for the entire 24-second video
+  const [globalSettings, setGlobalSettings] = useState({
+    tujuanVideo: '',
+    gayaVisual: '',
+    moodAtmosfer: '',
+    pengaturanAdegan: '',
+    jumlahKarakter: '',
+    deskripsiKarakter: '',
+    warnaDominan: '',
+    pencahayaan: '',
+  });
+
+  // State for each of the three 8-second video parts
+  const [videoParts, setVideoParts] = useState([
+    {
+      partNumber: 1,
+      aksiInteraksiKarakter: '',
+      objekPenting: '',
+      gerakanKamera: '',
+      transisi: '',
+      teksDiLayar: '',
+      efekVisualKhusus: '',
+      dialogs: [], // Array of dialogs for this specific part
+      narasiKonsepCeritaPart: '', // Specific narrative for this part
+    },
+    {
+      partNumber: 2,
+      aksiInteraksiKarakter: '',
+      objekPenting: '',
+      gerakanKamera: '',
+      transisi: '',
+      teksDiLayar: '',
+      efekVisualKhusus: '',
+      dialogs: [],
+      narasiKonsepCeritaPart: '',
+    },
+    {
+      partNumber: 3,
+      aksiInteraksiKarakter: '',
+      objekPenting: '',
+      gerakanKamera: '',
+      transisi: '',
+      teksDiLayar: '',
+      efekVisualKhusus: '',
+      dialogs: [],
+      narasiKonsepCeritaPart: '',
+    },
+  ]);
+
+  // State to manage which part's details are currently being edited
+  const [activePartIndex, setActivePartIndex] = useState(0); // 0, 1, or 2
+
+  // State for generated prompts and copy status
+  const [generatedPrompts, setGeneratedPrompts] = useState([]); // Array of 3 prompt strings
+  const [copyStatus, setCopyStatus] = useState('');
+
+  // Options for dropdowns (can be expanded)
+  const gayaVisualOptions = ['Futuristik', 'Minimalis', 'Vintage', 'Realistis', 'Kartun 2D', 'Kartun 3D', 'Abstrak', 'Cinematic', 'Dokumenter', 'Hand-drawn', 'Stop-motion', 'Kustom'];
+  const moodOptions = ['Ceria', 'Serius', 'Dramatis', 'Menenangkan', 'Energik', 'Misterius', 'Inspiratif', 'Humoris', 'Tegang', 'Santai', 'Kustom'];
+  const gerakanKameraOptions = ['Slow zoom in', 'Fast pan', 'Steady shot', 'Drone view', 'Handheld shaky', 'Tracking shot', 'Close-up', 'Wide shot', 'POV (Point of View)', 'Kustom'];
+  const transisiOptions = ['Cross-fade', 'Cut cepat', 'Wipe', 'Dissolve', 'Slide', 'Glitch effect', 'Kustom'];
+  const toneOptions = ['Bersemangat', 'Merenung', 'Informatif', 'Sedih', 'Ceria', 'Persuasif', 'Ramah', 'Penasaran', 'Tegang', 'Humoris', 'Berdebat', 'Kolaboratif', 'Diskusi panel', 'Percakapan santai', 'Kustom'];
+
+  // Function to update global settings
+  const handleGlobalSettingChange = (field, value) => {
+    setGlobalSettings(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Function to update a specific property of a video part
+  const handlePartSettingChange = (partIndex, field, value) => {
+    setVideoParts(prev =>
+      prev.map((part, idx) => (idx === partIndex ? { ...part, [field]: value } : part))
+    );
+  };
+
+  // Function to add a new dialog block to a specific part
+  const addDialog = (partIndex, type) => {
+    const newDialog = type === 'monolog'
+      ? { id: Date.now(), type: 'monolog', speaker: '', text: '', tone: '' }
+      : type === 'two'
+        ? { id: Date.now(), type: 'two', speaker1: '', text1: '', speaker2: '', text2: '', tone: '' }
+        : { id: Date.now(), type: 'three_plus', speakers: [{ name: '', text: '' }, { name: '', text: '' }, { name: '', text: '' }], tone: '' };
+
+    setVideoParts(prev =>
+      prev.map((part, idx) =>
+        idx === partIndex ? { ...part, dialogs: [...part.dialogs, newDialog] } : part
+      )
+    );
+  };
+
+  // Function to remove a dialog block from a specific part
+  const removeDialog = (partIndex, dialogId) => {
+    setVideoParts(prev =>
+      prev.map((part, idx) =>
+        idx === partIndex ? { ...part, dialogs: part.dialogs.filter(d => d.id !== dialogId) } : part
+      )
+    );
+  };
+
+  // Function to update a dialog block's properties for a specific part
+  const updateDialog = (partIndex, dialogId, field, value, speakerIndex = null, subField = null) => {
+    setVideoParts(prev =>
+      prev.map((part, pIdx) => {
+        if (pIdx === partIndex) {
+          return {
+            ...part,
+            dialogs: part.dialogs.map(dialog => {
+              if (dialog.id === dialogId) {
+                if (dialog.type === 'three_plus' && speakerIndex !== null && subField !== null) {
+                  const updatedSpeakers = [...dialog.speakers];
+                  updatedSpeakers[speakerIndex] = { ...updatedSpeakers[speakerIndex], [subField]: value };
+                  return { ...dialog, speakers: updatedSpeakers };
+                }
+                return { ...dialog, [field]: value };
+              }
+              return dialog;
+            }),
+          };
+        }
+        return part;
+      })
+    );
+  };
+
+  // Function to add a speaker to a three_plus dialog for a specific part
+  const addSpeakerToThreePlus = (partIndex, dialogId) => {
+    setVideoParts(prev =>
+      prev.map((part, pIdx) => {
+        if (pIdx === partIndex) {
+          return {
+            ...part,
+            dialogs: part.dialogs.map(dialog => {
+              if (dialog.id === dialogId && dialog.type === 'three_plus') {
+                return { ...dialog, speakers: [...dialog.speakers, { name: '', text: '' }] };
+              }
+              return dialog;
+            }),
+          };
+        }
+        return part;
+      })
+    );
+  };
+
+  // Function to remove a speaker from a three_plus dialog for a specific part
+  const removeSpeakerFromThreePlus = (partIndex, dialogId, speakerIndex) => {
+    setVideoParts(prev =>
+      prev.map((part, pIdx) => {
+        if (pIdx === partIndex) {
+          return {
+            ...part,
+            dialogs: part.dialogs.map(dialog => {
+              if (dialog.id === dialogId && dialog.type === 'three_plus') {
+                const updatedSpeakers = dialog.speakers.filter((_, idx) => idx !== speakerIndex);
+                return { ...dialog, speakers: updatedSpeakers };
+              }
+              return dialog;
+            }),
+          };
+        }
+        return part;
+      })
+    );
+  };
+
+  // Function to generate the three continuous prompt strings
+  const generatePrompts = useCallback(() => {
+    const prompts = videoParts.map(part => {
+      let prompt = `Buatlah video untuk ${globalSettings.tujuanVideo || '[TUJUAN VIDEO]'}.\n\n`;
+
+      prompt += `**Durasi:** 8 detik\n\n`; // Fixed duration for each part
+      prompt += `**Gaya Visual:** ${globalSettings.gayaVisual || '[GAYA VISUAL]'}\n\n`;
+      prompt += `**Mood/Atmosfer:** ${globalSettings.moodAtmosfer || '[MOOD/ATMOSFER]'}\n\n`;
+      prompt += `**Pengaturan Adegan (Setting/Lokasi):** ${globalSettings.pengaturanAdegan || '[PENGATURAN ADEGAN]'}\n\n`;
+
+      if (globalSettings.jumlahKarakter || globalSettings.deskripsiKarakter || part.aksiInteraksiKarakter) {
+        prompt += `**Karakter (jika ada):**\n`;
+        prompt += `* **Jumlah:** ${globalSettings.jumlahKarakter || '[JUMLAH KARAKTER]'}\n`;
+        prompt += `* **Deskripsi (jika spesifik):** ${globalSettings.deskripsiKarakter || '[DESKRIPSI KARAKTER]'}\n`;
+        prompt += `* **Aksi/Interaksi (non-dialog):** ${part.aksiInteraksiKarakter || '[AKSI/INTERAKSI KARAKTER UNTUK BAGIAN INI]'}\n\n`;
+      }
+
+      if (part.objekPenting) {
+        prompt += `**Objek Penting/Detail Spesifik:** ${part.objekPenting}\n\n`;
+      }
+
+      prompt += `**Gerakan Kamera:** ${part.gerakanKamera || '[GERAKAN KAMERA UNTUK BAGIAN INI]'}\n\n`;
+      prompt += `**Transisi Antar Scene:** ${part.transisi || '[TRANSISI UNTUK BAGIAN INI]'}\n\n`;
+
+      if (part.dialogs.length > 0) {
+        prompt += `**Dialog (Opsional):**\n`;
+        prompt += `*Catatan: Pastikan dialog berbahasa Indonesia untuk konsistensi.*\n`; // Added instruction
+        part.dialogs.forEach(d => {
+          if (d.type === 'monolog') {
+            prompt += `* **Dialog Monolog (Satu Karakter):**\n`;
+            prompt += `    * **Karakter:** ${d.speaker || '[NAMA/DESKRIPSI KARAKTER YANG BERBICARA]'}\n`;
+            prompt += `    * **Isi Dialog:** "${d.text || '[TULIS DIALOG MONOLOG DI SINI (Bahasa Indonesia)]'}"\n`; // Updated placeholder
+            prompt += `    * **Tone:** ${d.tone || '[TONE DIALOG]'}\n\n`;
+          } else if (d.type === 'two') {
+            prompt += `* **Dialog Dua Karakter:**\n`;
+            prompt += `    * **Karakter 1:** ${d.speaker1 || '[NAMA/DESKRIPSI KARAKTER 1]'}\n`;
+            prompt += `    * **Dialog Karakter 1:** "${d.text1 || '[TULIS DIALOG KARAKTER 1 (Bahasa Indonesia)]'}"\n`; // Updated placeholder
+            prompt += `    * **Karakter 2:** ${d.speaker2 || '[NAMA/DESKRIPSI KARAKTER 2]'}\n`;
+            prompt += `    * **Dialog Karakter 2:** "${d.text2 || '[TULIS DIALOG KARAKTER 2 (Bahasa Indonesia)]'}"\n`; // Updated placeholder
+            prompt += `    * **Tone Interaksi:** ${d.tone || '[TONE INTERAKSI]'}\n\n`;
+          } else if (d.type === 'three_plus') {
+            prompt += `* **Dialog Tiga Karakter atau Lebih:**\n`;
+            d.speakers.forEach((s, idx) => {
+              prompt += `    * **Karakter ${idx + 1}:** ${s.name || `[NAMA/DESKRIPSI KARAKTER ${idx + 1}]`}\n`;
+              prompt += `    * **Dialog Karakter ${idx + 1}:** "${s.text || `[TULIS DIALOG KARAKTER ${idx + 1} (Bahasa Indonesia)]`}"\n`; // Updated placeholder
+            });
+            prompt += `    * **Tone Interaksi:** ${d.tone || '[TONE INTERAKSI]'}\n\n`;
+          }
+        });
+      }
+
+      if (globalSettings.teksDiLayar || globalSettings.efekVisualKhusus || globalSettings.warnaDominan || globalSettings.pencahayaan) {
+        prompt += `**Elemen Tambahan (opsional):**\n`;
+        if (globalSettings.teksDiLayar) prompt += `* **Teks di Layar:** ${globalSettings.teksDiLayar}\n`;
+        if (globalSettings.efekVisualKhusus) prompt += `* **Efek Visual Khusus:** ${globalSettings.efekVisualKhusus}\n`;
+        if (globalSettings.warnaDominan) prompt += `* **Warna Dominan/Palet Warna:** ${globalSettings.warnaDominan}\n`;
+        if (globalSettings.pencahayaan) prompt += `* **Pencahayaan:** ${globalSettings.pencahayaan}\n`;
+        prompt += `\n`;
+      }
+
+      if (part.narasiKonsepCeritaPart) {
+        prompt += `**Narasi/Konsep Cerita (Opsional, jika ada alur untuk bagian ini):**\n${part.narasiKonsepCeritaPart}\n`;
+      }
+
+      return prompt.trim();
+    });
+
+    setGeneratedPrompts(prompts);
+    setCopyStatus(''); // Reset copy status
+  }, [globalSettings, videoParts]);
+
+  // Function to copy all prompts to clipboard
+  const copyAllToClipboard = () => {
+    try {
+      const allPromptsText = generatedPrompts.map((p, idx) => `--- PROMPT BAGIAN ${idx + 1} ---\n${p}`).join('\n\n');
+      const textarea = document.createElement('textarea');
+      textarea.value = allPromptsText;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopyStatus('Semua prompt berhasil disalin!');
+    } catch (err) {
+      console.error('Gagal menyalin:', err);
+      setCopyStatus('Gagal menyalin semua prompt.');
+    } finally {
+      setTimeout(() => setCopyStatus(''), 3000); // Clear status after 3 seconds
+    }
+  };
+
+  // Tailwind CSS classes for consistent styling
+  const inputClass = "w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500";
+  const labelClass = "block text-sm font-medium text-gray-700 mb-1";
+  const sectionClass = "bg-white p-6 rounded-lg shadow-md mb-6";
+  const buttonClass = "px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition ease-in-out duration-150";
+  const secondaryButtonClass = "px-3 py-1 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 transition ease-in-out duration-150";
+  const tabButtonClass = (isActive) => `px-4 py-2 text-sm font-medium rounded-t-lg ${isActive ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`;
+
+
+  return (
+    <div className="min-h-screen bg-gray-100 p-4 font-sans text-gray-900 flex flex-col items-center">
+      <script src="https://cdn.tailwindcss.com"></script>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+      <style>
+        {`
+          body {
+            font-family: 'Inter', sans-serif;
+          }
+        `}
+      </style>
+
+      <h1 className="text-4xl font-bold text-center text-blue-800 mb-8 mt-4">Generator Prompt Video Veo 3 Kontinu (24 Detik)</h1>
+      <p className="text-center text-gray-600 mb-8 max-w-2xl">
+        Isi detail di bawah ini untuk menghasilkan 3 prompt video Veo 3 yang berurutan, masing-masing 8 detik, untuk total video 24 detik yang konsisten dan mengalir.
+      </p>
+
+      <div className="w-full max-w-4xl">
+        {/* Bagian Pengaturan Global */}
+        <div className={sectionClass}>
+          <h2 className="text-2xl font-semibold text-blue-700 mb-4">Pengaturan Umum Video (Global)</h2>
+          <p className="text-gray-600 mb-4">Pengaturan ini akan diterapkan ke semua 3 bagian video untuk menjaga konsistensi.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mb-4">
+              <label htmlFor="tujuanVideo" className={labelClass}>Tujuan Video:</label>
+              <input
+                type="text"
+                id="tujuanVideo"
+                className={inputClass}
+                placeholder="misalnya, promosi produk baru, tutorial singkat"
+                value={globalSettings.tujuanVideo}
+                onChange={(e) => handleGlobalSettingChange('tujuanVideo', e.target.value)}
+              />
+            </div>
+            <div className="mb-4">
+              <label htmlFor="gayaVisual" className={labelClass}>Gaya Visual:</label>
+              <select
+                id="gayaVisual"
+                className={inputClass}
+                value={globalSettings.gayaVisual}
+                onChange={(e) => handleGlobalSettingChange('gayaVisual', e.target.value)}
+              >
+                <option value="">Pilih Gaya Visual</option>
+                {gayaVisualOptions.map(option => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div className="mb-4">
+              <label htmlFor="moodAtmosfer" className={labelClass}>Mood/Atmosfer:</label>
+              <select
+                id="moodAtmosfer"
+                className={inputClass}
+                value={globalSettings.moodAtmosfer}
+                onChange={(e) => handleGlobalSettingChange('moodAtmosfer', e.target.value)}
+              >
+                <option value="">Pilih Mood/Atmosfer</option>
+                {moodOptions.map(option => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div className="mb-4">
+              <label htmlFor="pengaturanAdegan" className={labelClass}>Pengaturan Adegan (Setting/Lokasi):</label>
+              <input
+                type="text"
+                id="pengaturanAdegan"
+                className={inputClass}
+                placeholder="misalnya, di laboratorium yang canggih, di kota metropolitan"
+                value={globalSettings.pengaturanAdegan}
+                onChange={(e) => handleGlobalSettingChange('pengaturanAdegan', e.target.value)}
+              />
+            </div>
+            <div className="mb-4">
+              <label htmlFor="jumlahKarakter" className={labelClass}>Jumlah Karakter:</label>
+              <input
+                type="text"
+                id="jumlahKarakter"
+                className={inputClass}
+                placeholder="misalnya, 1, 2, beberapa"
+                value={globalSettings.jumlahKarakter}
+                onChange={(e) => handleGlobalSettingChange('jumlahKarakter', e.target.value)}
+              />
+            </div>
+            <div className="mb-4 col-span-full">
+              <label htmlFor="deskripsiKarakter" className={labelClass}>Deskripsi Karakter (jika spesifik):</label>
+              <textarea
+                id="deskripsiKarakter"
+                className={`${inputClass} h-20`}
+                placeholder="misalnya, seorang ilmuwan muda yang bersemangat, seekor robot ramah"
+                value={globalSettings.deskripsiKarakter}
+                onChange={(e) => handleGlobalSettingChange('deskripsiKarakter', e.target.value)}
+              ></textarea>
+            </div>
+            <div className="mb-4">
+              <label htmlFor="warnaDominan" className={labelClass}>Warna Dominan/Palet Warna:</label>
+              <input
+                type="text"
+                id="warnaDominan"
+                className={inputClass}
+                placeholder="misalnya, warna-warna cerah dan pop, monokrom"
+                value={globalSettings.warnaDominan}
+                onChange={(e) => handleGlobalSettingChange('warnaDominan', e.target.value)}
+              />
+            </div>
+            <div className="mb-4">
+              <label htmlFor="pencahayaan" className={labelClass}>Pencahayaan:</label>
+              <input
+                type="text"
+                id="pencahayaan"
+                className={inputClass}
+                placeholder="misalnya, pencahayaan lembut alami, cahaya dramatis"
+                value={globalSettings.pencahayaan}
+                onChange={(e) => handleGlobalSettingChange('pencahayaan', e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Bagian Detail Per Bagian Video */}
+        <div className={sectionClass}>
+          <h2 className="text-2xl font-semibold text-blue-700 mb-4">Detail Per Bagian Video (8 Detik Per Bagian)</h2>
+          <div className="flex border-b border-gray-200 mb-4">
+            {videoParts.map((part, index) => (
+              <button
+                key={part.partNumber}
+                onClick={() => setActivePartIndex(index)}
+                className={tabButtonClass(activePartIndex === index)}
+              >
+                Bagian {part.partNumber}
+              </button>
+            ))}
+          </div>
+
+          {/* Render content for the active part */}
+          {videoParts.map((part, partIndex) => (
+            <div key={part.partNumber} style={{ display: activePartIndex === partIndex ? 'block' : 'none' }}>
+              <h3 className="text-xl font-semibold text-blue-600 mb-4">Pengaturan Bagian {part.partNumber}</h3>
+              <div className="mb-4">
+                <label htmlFor={`aksiInteraksiKarakter-${partIndex}`} className={labelClass}>Aksi/Interaksi Karakter (non-dialog) untuk Bagian Ini:</label>
+                <textarea
+                  id={`aksiInteraksiKarakter-${partIndex}`}
+                  className={`${inputClass} h-20`}
+                  placeholder="misalnya, karakter A sedang menjelaskan fitur, karakter B berlari gembira"
+                  value={part.aksiInteraksiKarakter}
+                  onChange={(e) => handlePartSettingChange(partIndex, 'aksiInteraksiKarakter', e.target.value)}
+                ></textarea>
+              </div>
+              <div className="mb-4">
+                <label htmlFor={`objekPenting-${partIndex}`} className={labelClass}>Objek Penting/Detail Spesifik untuk Bagian Ini:</label>
+                <textarea
+                  id={`objekPenting-${partIndex}`}
+                  className={`${inputClass} h-20`}
+                  placeholder="misalnya, prototipe teknologi terlihat di tangan, buku tua terbuka di meja"
+                  value={part.objekPenting}
+                  onChange={(e) => handlePartSettingChange(partIndex, 'objekPenting', e.target.value)}
+                ></textarea>
+              </div>
+              <div className="mb-4">
+                <label htmlFor={`gerakanKamera-${partIndex}`} className={labelClass}>Gerakan Kamera untuk Bagian Ini:</label>
+                <select
+                  id={`gerakanKamera-${partIndex}`}
+                  className={inputClass}
+                  value={part.gerakanKamera}
+                  onChange={(e) => handlePartSettingChange(partIndex, 'gerakanKamera', e.target.value)}
+                >
+                  <option value="">Pilih Gerakan Kamera</option>
+                  {gerakanKameraOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mb-4">
+                <label htmlFor={`transisi-${partIndex}`} className={labelClass}>Transisi Antar Scene untuk Bagian Ini:</label>
+                <select
+                  id={`transisi-${partIndex}`}
+                  className={inputClass}
+                  value={part.transisi}
+                  onChange={(e) => handlePartSettingChange(partIndex, 'transisi', e.target.value)}
+                >
+                  <option value="">Pilih Transisi</option>
+                  {transisiOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mb-4">
+                <label htmlFor={`teksDiLayar-${partIndex}`} className={labelClass}>Teks di Layar untuk Bagian Ini:</label>
+                <input
+                  type="text"
+                  id={`teksDiLayar-${partIndex}`}
+                  className={inputClass}
+                  placeholder="misalnya, 'Fitur Baru!', 'Solusi Cerdas'"
+                  value={part.teksDiLayar}
+                  onChange={(e) => handlePartSettingChange(partIndex, 'teksDiLayar', e.target.value)}
+                />
+              </div>
+              <div className="mb-4">
+                <label htmlFor={`efekVisualKhusus-${partIndex}`} className={labelClass}>Efek Visual Khusus untuk Bagian Ini:</label>
+                <input
+                  type="text"
+                  id={`efekVisualKhusus-${partIndex}`}
+                  className={inputClass}
+                  placeholder="misalnya, kilatan cahaya, partikel melayang"
+                  value={part.efekVisualKhusus}
+                  onChange={(e) => handlePartSettingChange(partIndex, 'efekVisualKhusus', e.target.value)}
+                />
+              </div>
+
+              {/* Dialog Section for this part */}
+              <h4 className="text-lg font-semibold text-blue-600 mb-3 mt-6">Dialog untuk Bagian Ini (Opsional)</h4>
+              <p className="text-sm text-gray-600 mb-3">Mohon masukkan dialog dalam Bahasa Indonesia untuk konsistensi.</p> {/* Added instruction */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button onClick={() => addDialog(partIndex, 'monolog')} className={secondaryButtonClass}>
+                  + Tambah Dialog Monolog
+                </button>
+                <button onClick={() => addDialog(partIndex, 'two')} className={secondaryButtonClass}>
+                  + Tambah Dialog 2 Karakter
+                </button>
+                <button onClick={() => addDialog(partIndex, 'three_plus')} className={secondaryButtonClass}>
+                  + Tambah Dialog 3+ Karakter
+                </button>
+              </div>
+
+              {part.dialogs.map((dialog, dialogIndex) => (
+                <div key={dialog.id} className="border border-blue-200 p-4 rounded-md mb-4 bg-blue-50 relative">
+                  <button
+                    onClick={() => removeDialog(partIndex, dialog.id)}
+                    className="absolute top-2 right-2 text-red-500 hover:text-red-700 font-bold text-xl"
+                    title="Hapus Dialog Ini"
+                  >
+                    &times;
+                  </button>
+                  <h3 className="text-lg font-semibold text-blue-600 mb-3">Dialog #{dialogIndex + 1} ({dialog.type === 'monolog' ? 'Monolog' : dialog.type === 'two' ? 'Dua Karakter' : 'Tiga/Lebih Karakter'})</h3>
+
+                  {dialog.type === 'monolog' && (
+                    <>
+                      <div className="mb-3">
+                        <label className={labelClass}>Karakter:</label>
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={dialog.speaker}
+                          onChange={(e) => updateDialog(partIndex, dialog.id, 'speaker', e.target.value)}
+                          placeholder="misalnya, Narator, Karakter A"
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label className={labelClass}>Isi Dialog:</label>
+                        <textarea
+                          className={`${inputClass} h-16`}
+                          value={dialog.text}
+                          onChange={(e) => updateDialog(partIndex, dialog.id, 'text', e.target.value)}
+                          placeholder="misalnya, 'Dulis dialog di sini (Bahasa Indonesia).'" // Updated placeholder
+                        ></textarea>
+                      </div>
+                      <div className="mb-3">
+                        <label className={labelClass}>Tone:</label>
+                        <select
+                          className={inputClass}
+                          value={dialog.tone}
+                          onChange={(e) => updateDialog(partIndex, dialog.id, 'tone', e.target.value)}
+                        >
+                          <option value="">Pilih Tone</option>
+                          {toneOptions.map(option => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  {dialog.type === 'two' && (
+                    <>
+                      <div className="mb-3">
+                        <label className={labelClass}>Karakter 1:</label>
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={dialog.speaker1}
+                          onChange={(e) => updateDialog(partIndex, dialog.id, 'speaker1', e.target.value)}
+                          placeholder="misalnya, Karakter A"
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label className={labelClass}>Dialog Karakter 1:</label>
+                        <textarea
+                          className={`${inputClass} h-16`}
+                          value={dialog.text1}
+                          onChange={(e) => updateDialog(partIndex, dialog.id, 'text1', e.target.value)}
+                          placeholder="misalnya, 'Tulis dialog di sini (Bahasa Indonesia).'" // Updated placeholder
+                        ></textarea>
+                      </div>
+                      <div className="mb-3">
+                        <label className={labelClass}>Karakter 2:</label>
+                        <input
+                          type="text"
+                          className={inputClass}
+                          value={dialog.speaker2}
+                          onChange={(e) => updateDialog(partIndex, dialog.id, 'speaker2', e.target.value)}
+                          placeholder="misalnya, Karakter B"
+                        />
+                      </div>
+                      <div className="mb-3">
+                        <label className={labelClass}>Dialog Karakter 2:</label>
+                        <textarea
+                          className={`${inputClass} h-16`}
+                          value={dialog.text2}
+                          onChange={(e) => updateDialog(partIndex, dialog.id, 'text2', e.target.value)}
+                          placeholder="misalnya, 'Tulis dialog di sini (Bahasa Indonesia).'" // Updated placeholder
+                        ></textarea>
+                      </div>
+                      <div className="mb-3">
+                        <label className={labelClass}>Tone Interaksi:</label>
+                        <select
+                          className={inputClass}
+                          value={dialog.tone}
+                          onChange={(e) => updateDialog(partIndex, dialog.id, 'tone', e.target.value)}
+                        >
+                          <option value="">Pilih Tone</option>
+                          {toneOptions.map(option => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  {dialog.type === 'three_plus' && (
+                    <>
+                      {dialog.speakers.map((speaker, sIdx) => (
+                        <div key={sIdx} className="border border-gray-200 p-3 rounded-md mb-3 bg-white relative">
+                          <h4 className="text-md font-medium text-gray-700 mb-2">Karakter {sIdx + 1}</h4>
+                          <div className="mb-2">
+                            <label className={labelClass}>Nama/Deskripsi:</label>
+                            <input
+                              type="text"
+                              className={inputClass}
+                              value={speaker.name}
+                              onChange={(e) => updateDialog(partIndex, dialog.id, null, e.target.value, sIdx, 'name')}
+                              placeholder={`misalnya, Karakter ${sIdx + 1}`}
+                            />
+                          </div>
+                          <div className="mb-2">
+                            <label className={labelClass}>Dialog:</label>
+                            <textarea
+                              className={`${inputClass} h-16`}
+                              value={speaker.text}
+                              onChange={(e) => updateDialog(partIndex, dialog.id, null, e.target.value, sIdx, 'text')}
+                              placeholder={`misalnya, 'Tulis dialog di sini (Bahasa Indonesia).'`} // Updated placeholder
+                            ></textarea>
+                          </div>
+                          {dialog.speakers.length > 1 && (
+                            <button
+                              onClick={() => removeSpeakerFromThreePlus(partIndex, dialog.id, sIdx)}
+                              className="absolute top-2 right-2 text-red-400 hover:text-red-600 text-lg"
+                              title="Hapus Karakter Ini"
+                            >
+                              &times;
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <div className="flex justify-end mt-2">
+                        <button onClick={() => addSpeakerToThreePlus(partIndex, dialog.id)} className={secondaryButtonClass}>
+                          + Tambah Karakter
+                        </button>
+                      </div>
+                      <div className="mt-3">
+                        <label className={labelClass}>Tone Interaksi:</label>
+                        <select
+                          className={inputClass}
+                          value={dialog.tone}
+                          onChange={(e) => updateDialog(partIndex, dialog.id, 'tone', e.target.value)}
+                        >
+                          <option value="">Pilih Tone</option>
+                          {toneOptions.map(option => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+              <div className="mb-4 mt-6">
+                <label htmlFor={`narasiKonsepCeritaPart-${partIndex}`} className={labelClass}>Narasi/Konsep Cerita untuk Bagian Ini (Opsional):</label>
+                <textarea
+                  id={`narasiKonsepCeritaPart-${partIndex}`}
+                  className={`${inputClass} h-32`}
+                  placeholder="misalnya, 'Bagian ini fokus pada pengenalan masalah yang dihadapi karakter, diakhiri dengan transisi ke solusi.'"
+                  value={part.narasiKonsepCeritaPart}
+                  onChange={(e) => handlePartSettingChange(partIndex, 'narasiKonsepCeritaPart', e.target.value)}
+                ></textarea>
+              </div>
+            </div>
+          ))}
+        </div>
+
+
+        {/* Tombol Generate */}
+        <div className="text-center mb-8">
+          <button onClick={generatePrompts} className={buttonClass}>
+            Generate 3 Prompt Kontinu
+          </button>
+        </div>
+
+        {/* Hasil Prompt */}
+        {generatedPrompts.length > 0 && (
+          <div className={sectionClass}>
+            <h2 className="text-2xl font-semibold text-blue-700 mb-4">Prompt Video Anda (3 Bagian):</h2>
+            <div className="bg-gray-50 border border-gray-200 p-4 rounded-md relative">
+              {generatedPrompts.map((prompt, index) => (
+                <div key={index} className="mb-6 border-b pb-4 last:border-b-0 last:pb-0">
+                  <h3 className="text-lg font-semibold text-blue-600 mb-2">Prompt Bagian {index + 1} (8 Detik)</h3>
+                  <pre className="whitespace-pre-wrap text-sm font-mono">{prompt}</pre>
+                </div>
+              ))}
+              <button
+                onClick={copyAllToClipboard}
+                className="absolute top-2 right-2 px-3 py-1 bg-green-500 text-white text-xs rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400"
+              >
+                Salin Semua Prompt
+              </button>
+              {copyStatus && (
+                <p className="text-green-600 text-xs mt-2 text-right">{copyStatus}</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default App;
